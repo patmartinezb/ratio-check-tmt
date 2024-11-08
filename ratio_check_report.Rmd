@@ -1,0 +1,229 @@
+---
+title: "Ratio check report"
+author: "Patricia Martínez-Botía"
+date: "2024-11-07"
+output: 
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: true
+params:
+  data:
+    label: "Upload data matrix file:"
+    input: file
+    value: NULL
+  anno:
+    label: "Upload annotation file:"
+    input: file
+    value: NULL
+  volume:
+    label: "Volume:"
+    input: numeric
+    value: 30
+  tmtpro:
+    label: "TMTpro"
+    input: checkbox
+    value: TRUE
+  tmt:
+    label: "TMT"
+    input: checkbox
+    value: FALSE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.align = "center")
+```
+
+```{r}
+# Load libraries
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(kableExtra)
+```
+
+```{r}
+# Load data
+df_psm <- readr::read_delim(params$data, 
+                     delim = "\t", 
+                     escape_double = FALSE, 
+                     trim_ws = TRUE) %>% 
+  janitor::clean_names()
+
+anno_psm <- readr::read_table(params$anno,
+                       col_names = FALSE) %>% 
+  rename(channel = X1,
+         key = X2)
+
+if (params$tmtpro){
+  tmt = "K\\(304.2072\\)"
+}
+
+if (params$tmt){
+  tmt = "K\\(229.16293\\)"
+}
+
+```
+
+### Overall information
+
+```{r}
+total_peptides <- nrow(df_psm)
+unique_peptides <- df_psm %>% distinct(peptide) %>% nrow()
+total_protein <- length(unique(df_psm$protein_id))
+# reverse hits
+# contaminants
+
+t(data.frame(total_peptides,
+           unique_peptides,
+           total_protein)) %>% 
+  kbl() %>%
+  kable_paper("hover", full_width = F, font_size = 19)
+```
+
+<br>
+
+```{r fig.height=6, fig.width=10}
+m_cle <- df_psm %>% 
+  select(number_of_missed_cleavages) %>% 
+  mutate(number_of_missed_cleavages = as.factor(number_of_missed_cleavages)) %>%
+  group_by(number_of_missed_cleavages) %>% 
+  count() %>% 
+  ggplot(aes(number_of_missed_cleavages, n)) +
+  geom_col(fill = "darkolivegreen",
+           alpha = .6,
+           color = "grey20") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0.03, 0.1)) +
+  geom_text(aes(label = paste0(n, " - ", round(n/nrow(df_psm)*100, 2), "%")),
+            vjust = -.2) +
+  labs(x = "# of missed cleavages",
+       y = "# of PSMs (%)",
+       title = "Distribution of missed cleavages")
+
+charge <- df_psm %>% 
+  select(charge) %>% 
+  mutate(charge = as.factor(charge)) %>%
+  group_by(charge) %>% 
+  count() %>% 
+  ggplot(aes(charge, n)) +
+  geom_col(fill = "skyblue",
+           alpha = .6,
+           color = "grey20") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0.03, 0.1)) +
+  geom_text(aes(label = paste0(n, " - ", round(n/nrow(df_psm)*100, 2), "%")),
+            vjust = -.2) +
+  labs(x = "Charge (z)",
+       y = "# of PSMs (%)",
+       title = "Distribution of charge")
+
+
+ggpubr::ggarrange(m_cle,
+                  charge,
+                  ncol = 2)
+```
+
+<br>
+
+```{r}
+df_psm %>% 
+  mutate(retention = retention/60) %>% 
+  ggplot(aes(retention, intensity)) +
+  geom_line(color = "darkblue") +
+  theme_classic() +
+  labs(x = "Retention time (minutes)",
+       y = "Intensity",
+       title = "Base peak chromatogram") +
+  scale_y_continuous(expand = c(0, 0.1)) +
+  scale_x_continuous(breaks = seq(0,140,20))
+```
+
+
+### Percentage of modified peptides
+
+```{r}
+df_psm %>% 
+  select(peptide,
+         assigned_modifications) %>% 
+  mutate(is_M = grepl("15.9949", assigned_modifications),
+         is_K_tmt = grepl(tmt, assigned_modifications),
+         is_nterm_tmt = grepl("N-term", assigned_modifications),
+         has_M = grepl("M", peptide),
+         has_K = grepl("K", peptide),
+         potential_nterm = TRUE) %>% 
+  pivot_longer(!c(peptide, assigned_modifications), names_to = "mod", values_to = "status") %>%
+  filter(status == TRUE) %>% 
+  group_by(mod) %>% 
+  count() %>% 
+  pivot_wider(names_from = mod, values_from = n) %>% 
+  mutate(perc_M = round(is_M/has_M*100, 2),
+         perc_K_tmt = round(is_K_tmt/has_K*100, 2),
+         perc_nterm_tmt = round(is_nterm_tmt/potential_nterm*100, 2)) %>% 
+  select(starts_with("perc")) %>%
+  t() %>% 
+  kbl() %>%
+  kable_paper("hover", full_width = F, font_size = 19)
+```
+
+### Ratio check
+
+```{r}
+df_ratio_psm <- df_psm %>% 
+  select(peptide,
+         starts_with("wt_"),
+         starts_with("ca_")) %>% 
+  pivot_longer(!peptide, names_to = "key", values_to = "vals") %>%
+  left_join(anno_psm, by = "key") %>% 
+  group_by(channel) %>% 
+  summarise(sum = sum(vals)) %>% 
+  mutate(ratio = sum/max(sum),
+         pq_ratio = max(sum)/sum,
+         channel = factor(channel,
+                          levels = anno_psm$channel))
+
+df_ratio_psm %>%
+  mutate(sample = anno_psm$key,
+         ratio = round(ratio, 2),
+         pq_ratio = round(pq_ratio, 2)) %>%
+  select(-sum) %>% 
+  relocate(sample, .before = 1) %>% 
+  kbl() %>%
+  kable_paper("hover", full_width = F, font_size = 19)
+```
+
+<br>
+
+```{r}
+df_ratio_psm %>% 
+  ggplot(aes(channel, ratio)) +
+  geom_col(fill = rainbow(18),
+           color = "grey20",
+           alpha = .5) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0, 0)) +
+  geom_text(aes(label = round(ratio, 3)),
+            angle = 90, hjust = 1.5) +
+  labs(x = "Channel",
+       y = "Ratio")
+```
+
+
+### Volume
+
+```{r}
+df_ratio_psm %>% 
+  mutate(volume = round(params$volume * pq_ratio/max(pq_ratio), 1),
+         sample = anno_psm$key) %>%
+  select(sample,
+         channel,
+         volume) %>% 
+  kbl() %>%
+  kable_paper("hover", full_width = F, font_size = 19)
+```
+

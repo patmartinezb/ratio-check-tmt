@@ -217,6 +217,8 @@ df_ratio_psm %>%
 
 ### Volume
 
+Volumes (uL) per sample:
+
 ```{r}
 df_ratio_psm %>% 
   mutate(volume = round(params$volume * pq_ratio/max(pq_ratio), 1),
@@ -224,7 +226,26 @@ df_ratio_psm %>%
   select(sample,
          channel,
          volume) %>% 
+  janitor::adorn_totals("row", fill = "Total volume") %>%
   kbl() %>%
-  kable_paper("hover", full_width = F, font_size = 19)
+  kable_paper("hover", full_width = F, font_size = 19) %>%
+  column_spec(3, background = "lightblue") %>% 
+  row_spec(nrow(anno_psm)+1, background = "salmon")
 ```
 
+<br>
+
+To go from 26.6% to a 3% of ACN, the following volume (uL) of 5% formic acid has to be added to the total volume:
+
+```{r}
+df_ratio_psm %>% 
+  mutate(vol = params$volume * pq_ratio/max(pq_ratio)) %>% 
+  summarise(sum_vol = sum(vol)) %>% 
+  mutate(vol_fa = 26.6 * sum_vol / 3,
+         vol_fa = round(vol_fa, 2)) %>%
+  select(vol_fa) %>% 
+  t() %>% 
+  kbl() %>%
+  kable_paper("hover", full_width = F, font_size = 19) %>% 
+  row_spec(1, bold = T, color = "white", background = "#D7261E")
+```

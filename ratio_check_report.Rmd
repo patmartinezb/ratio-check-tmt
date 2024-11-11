@@ -53,12 +53,14 @@ df_psm <- readr::read_delim(params$data,
                      delim = "\t", 
                      escape_double = FALSE, 
                      trim_ws = TRUE) %>% 
-  janitor::clean_names()
+  janitor::clean_names() %>% 
+  dplyr::select(!dplyr::starts_with("na_"))
 
 anno_psm <- readr::read_table(params$anno,
                        col_names = FALSE) %>% 
   rename(channel = X1,
-         key = X2)
+         key = X2) %>% 
+  filter(!is.na(key))
 
 if (params$tmtpro){
   tmt = "K\\(304.2072\\)"
@@ -176,8 +178,7 @@ df_psm %>%
 ```{r}
 df_ratio_psm <- df_psm %>% 
   select(peptide,
-         starts_with("wt_"),
-         starts_with("ca_")) %>% 
+         any_of(anno_psm$key)) %>% 
   pivot_longer(!peptide, names_to = "key", values_to = "vals") %>%
   left_join(anno_psm, by = "key") %>% 
   group_by(channel) %>% 
@@ -202,7 +203,7 @@ df_ratio_psm %>%
 ```{r}
 df_ratio_psm %>% 
   ggplot(aes(channel, ratio)) +
-  geom_col(fill = rainbow(18),
+  geom_col(fill = rainbow(nrow(anno_psm)),
            color = "grey20",
            alpha = .5) +
   theme_classic() +

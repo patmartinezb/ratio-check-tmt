@@ -1,7 +1,7 @@
 ---
 title: "Ratio check report"
 author: "Patricia Martínez-Botía"
-date: "2024-11-07"
+date: "`r format(Sys.time(), '%d/%m/%y')`"
 output: 
   html_document:
     theme: flatly
@@ -231,6 +231,9 @@ df_ratio_psm %>%
   kable_paper("hover", full_width = F, font_size = 19) %>%
   column_spec(3, background = "lightblue") %>% 
   row_spec(nrow(anno_psm)+1, background = "salmon")
+  # footnote(general = "Volume is reported in uL",
+  #          general_title = "",
+  #          fixed_small_size = T)
 ```
 
 <br>
@@ -247,5 +250,9 @@ df_ratio_psm %>%
   t() %>% 
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19) %>% 
-  row_spec(1, bold = T, color = "white", background = "#D7261E")
+  row_spec(1, bold = T, color = "white", background = "#D7261E") 
+  # footnote(general = "Volume is reported in uL",
+  #          general_title = "",
+  #          fixed_small_size = T)
 ```
+

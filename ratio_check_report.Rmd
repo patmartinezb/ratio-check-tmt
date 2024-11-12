@@ -60,7 +60,8 @@ anno_psm <- readr::read_table(params$anno,
                        col_names = FALSE) %>% 
   rename(channel = X1,
          key = X2) %>% 
-  filter(!is.na(key))
+  filter(!is.na(key)) %>% 
+  mutate(key = janitor::make_clean_names(key))
 
 if (params$tmtpro){
   tmt = "K\\(304.2072\\)"

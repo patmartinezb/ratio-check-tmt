@@ -190,11 +190,13 @@ df_ratio_psm <- df_psm %>%
                           levels = anno_psm$channel))
 
 df_ratio_psm %>%
-  mutate(sample = anno_psm$key,
-         ratio = round(ratio, 2),
+  left_join(anno_psm, by = "channel") %>% 
+  rename(sample = key) %>%
+  mutate(ratio = round(ratio, 2),
          pq_ratio = round(pq_ratio, 2)) %>%
-  select(-sum) %>% 
+  select(-sum) %>%
   relocate(sample, .before = 1) %>% 
+  arrange(factor(channel, levels = anno_psm$channel)) %>%
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19)
 ```
@@ -222,11 +224,13 @@ Volumes (uL) per sample:
 
 ```{r}
 df_ratio_psm %>% 
-  mutate(volume = round(params$volume * pq_ratio/max(pq_ratio), 1),
-         sample = anno_psm$key) %>%
+  mutate(volume = round(params$volume * pq_ratio/max(pq_ratio), 1)) %>%
+  left_join(anno_psm, by = "channel") %>% 
+  rename(sample = key) %>% 
   select(sample,
          channel,
          volume) %>% 
+  arrange(factor(channel, levels = anno_psm$channel)) %>% 
   janitor::adorn_totals("row", fill = "Total volume") %>%
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19) %>%

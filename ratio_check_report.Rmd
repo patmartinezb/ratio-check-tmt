@@ -53,7 +53,10 @@ df_psm <- readr::read_delim(params$data,
                      delim = "\t", 
                      escape_double = FALSE, 
                      trim_ws = TRUE) %>% 
-  janitor::clean_names() %>% 
+  janitor::clean_names() %>%
+  dplyr::rename_with(.,
+                     ~ gsub("intensity_", "", .x),
+                     starts_with("intensity_")) %>% 
   dplyr::select(!dplyr::starts_with("na_"))
 
 anno_psm <- readr::read_table(params$anno,

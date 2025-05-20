@@ -22,13 +22,10 @@ params:
     input: numeric
     value: 30
   tmtpro:
-    label: "TMTpro"
-    input: checkbox
-    value: TRUE
   tmt:
     label: "TMT"
-    input: checkbox
-    value: FALSE
+    input: text
+    value: "tmtpro"
 ---
 
 ```{r setup, include=FALSE}
@@ -66,11 +63,9 @@ anno_psm <- readr::read_table(params$anno,
   filter(!is.na(key)) %>% 
   mutate(key = janitor::make_clean_names(key))
 
-if (params$tmtpro){
+if (params$tmt == "tmtpro"){
   tmt = "K\\(304.2072\\)"
-}
-
-if (params$tmt){
+} else {
   tmt = "K\\(229.16293\\)"
 }
 

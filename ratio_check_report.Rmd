@@ -21,11 +21,13 @@ params:
     label: "Volume:"
     input: numeric
     value: 30
-  tmtpro:
   tmt:
     label: "TMT"
     input: text
     value: "tmtpro"
+  tmtextra:
+    label: "LysN extra labeling"
+    value: FALSE
 ---
 
 ```{r setup, include=FALSE}
@@ -64,9 +66,19 @@ anno_psm <- readr::read_table(params$anno,
   mutate(key = janitor::make_clean_names(key))
 
 if (params$tmt == "tmtpro"){
-  tmt = "K\\(304.2072\\)"
+  tmt = "K\\(304\\.2072\\)"
 } else {
-  tmt = "K\\(229.16293\\)"
+  tmt = "K\\(229\\.16293\\)"
+}
+
+if (params$tmtextra == TRUE){
+  
+  foo <- gsub("\\\\.", "\\.", stringr::str_extract(tmt, "[0-9]+\\\\.[0-9]+"))
+  
+  tmt2 <- round(as.numeric(foo) * 2, 3)
+  
+  tmt2 <- paste0("K\\(", gsub("\\.", "\\\\.", tmt2))
+  
 }
 
 ```
@@ -149,7 +161,8 @@ df_psm %>%
 ### Percentage of modified peptides
 
 ```{r}
-df_psm %>% 
+
+df_label <- df_psm %>% 
   select(peptide,
          assigned_modifications) %>% 
   mutate(is_M = grepl("15.9949", assigned_modifications),
@@ -166,7 +179,31 @@ df_psm %>%
   mutate(perc_M = round(is_M/has_M*100, 2),
          perc_K_tmt = round(is_K_tmt/has_K*100, 2),
          perc_nterm_tmt = round(is_nterm_tmt/potential_nterm*100, 2)) %>% 
-  select(starts_with("perc")) %>%
+  select(starts_with("perc")) 
+
+if (exists("tmt2")){
+  
+  df_tmt2 <- df_psm %>%
+    select(peptide,
+         assigned_modifications) %>% 
+    mutate(has_K = grepl("K", peptide),
+           is_K_tmt2 = grepl(tmt2, assigned_modifications)) %>% 
+    pivot_longer(!c(peptide, assigned_modifications), 
+                 names_to = "mod", 
+                 values_to = "status") %>%
+    filter(status == TRUE) %>% 
+    group_by(mod) %>% 
+    count() %>% 
+    pivot_wider(names_from = mod, values_from = n) %>% 
+    mutate(perc_K_tmt2 = round(is_K_tmt2/has_K*100, 2)) %>% 
+    select(starts_with("perc"))
+  
+  df_label <- cbind(df_label,
+                    df_tmt2)
+    
+}
+
+df_label %>%
   t() %>% 
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19)

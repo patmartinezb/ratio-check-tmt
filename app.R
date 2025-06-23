@@ -11,6 +11,7 @@ ui <- fluidPage(
       radioButtons("tmt", "What kind of TMT label was used?", 
                    choices = c("TMT" = "tmt",
                                "TMTpro" = "tmtpro")),
+      checkboxInput("tmtextra", "LysN extra labeling", value = FALSE),
       numericInput("volume", "Desired volume (uL):", value = 30),
       actionButton("generar", "Generate report")
     ),
@@ -48,6 +49,7 @@ server <- function(input, output, session) {
         data = input$data$datapath,
         anno = input$anno$datapath,
         tmt = input$tmt,
+        tmtextra = input$tmtextra,
         volume = input$volume
       ),
       envir = new.env(parent = globalenv())

@@ -142,8 +142,11 @@ mat_long_pep <- as.data.frame(matrix_peptides) %>%
                       names_to = "Fraction_y",
                       values_to = "jaccard") %>%
   mutate(Fraction_x = factor(Fraction_x, levels = rownames(matrix_peptides)),
-         Fraction_y = factor(Fraction_y, levels = rownames(matrix_peptides)))
+         Fraction_y = factor(Fraction_y, levels = rownames(matrix_peptides))) %>%
+  # Filtrar solo el triángulo inferior
+  filter(as.numeric(Fraction_x) >= as.numeric(Fraction_y))
 
+# Crear el heatmap solo del triángulo inferior
 ggplot(mat_long_pep, aes(Fraction_x, Fraction_y, fill = jaccard)) +
   geom_tile(color = "white") +
   geom_text(aes(label = round(jaccard, 2)), size = 3) +
@@ -158,15 +161,18 @@ ggplot(mat_long_pep, aes(Fraction_x, Fraction_y, fill = jaccard)) +
 ### Jaccard index — Proteins
 <br>
 ```{r fig.height=6, fig.width=7}
-# Heatmap proteins
+# Heatmap proteins (triángulo inferior)
 mat_long_prot <- as.data.frame(matrix_proteins) %>%
   tibble::rownames_to_column("Fraction_x") %>%
   tidyr::pivot_longer(!Fraction_x,
                       names_to = "Fraction_y",
                       values_to = "jaccard") %>%
   mutate(Fraction_x = factor(Fraction_x, levels = rownames(matrix_proteins)),
-         Fraction_y = factor(Fraction_y, levels = rownames(matrix_proteins)))
+         Fraction_y = factor(Fraction_y, levels = rownames(matrix_proteins))) %>%
+  # Filtrar solo el triángulo inferior
+  filter(as.numeric(Fraction_x) >= as.numeric(Fraction_y))
 
+# Crear el heatmap solo del triángulo inferior
 ggplot(mat_long_prot, aes(Fraction_x, Fraction_y, fill = jaccard)) +
   geom_tile(color = "white") +
   geom_text(aes(label = round(jaccard, 2)), size = 3) +

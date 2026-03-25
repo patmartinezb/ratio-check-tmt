@@ -1,0 +1,179 @@
+---
+title: "Overlap report"
+author: "Proteomics and Proteostasis Lab"
+date: "`r format(Sys.time(), '%d/%m/%y')`"
+output: 
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: true
+params:
+  data:
+    label: "Upload PSM file:"
+    input: file
+    value: NULL
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.align = "center")
+```
+
+```{r}
+# Load libraries
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(kableExtra)
+```
+
+```{r}
+# Load data
+df <- readr::read_delim(params$data,
+                        delim = "\t",
+                        escape_double = FALSE,
+                        trim_ws = TRUE)
+
+# Filters per condition and fraction
+psm <- df %>%
+  filter(`Is Unique` == "TRUE") %>%
+  mutate(Fraction = str_extract(Spectrum, "M\\d+"))
+
+number_of_fractions <- n_distinct(psm$Fraction)
+
+# Set builds
+peptide_sets <- psm %>%
+  group_by(Fraction) %>%
+  summarise(peptides = list(unique(Peptide))) %>%
+  arrange(as.numeric(sub("M", "", Fraction)))
+
+protein_sets <- psm %>%
+  group_by(Fraction) %>%
+  summarise(proteins = list(unique(Protein))) %>%
+  arrange(as.numeric(sub("M", "", Fraction)))
+
+# Jaccard functions
+jaccard_index <- function(set_df, i, j, col = 2) {
+  set1 <- set_df[[col]][[i]]
+  set2 <- set_df[[col]][[j]]
+  inter <- length(intersect(set1, set2))
+  union <- length(union(set1, set2))
+  if (union == 0) return(NA)
+  return((inter / union) * 100)
+}
+
+jaccard_matrix <- function(sets_df, col = 2) {
+  n <- nrow(sets_df)
+  mat <- matrix(NA, nrow = n, ncol = n)
+  rownames(mat) <- sets_df$Fraction
+  colnames(mat) <- sets_df$Fraction
+  for (i in 1:n) {
+    for (j in i:n) {
+      score <- jaccard_index(sets_df, i, j, col)
+      mat[i, j] <- score
+      mat[j, i] <- score
+    }
+  }
+  return(mat)
+}
+
+matrix_peptides <- jaccard_matrix(peptide_sets)
+matrix_proteins <- jaccard_matrix(protein_sets)
+```
+
+### Overall information
+```{r}
+total_psm    <- nrow(df)
+filtered_psm <- nrow(psm)
+n_fractions  <- number_of_fractions
+unique_pep   <- length(unique(psm$Peptide))
+unique_prot  <- length(unique(psm$Protein))
+
+t(data.frame(total_psm,
+             filtered_psm,
+             n_fractions,
+             unique_pep,
+             unique_prot)) %>%
+  kbl() %>%
+  kable_paper("hover", full_width = F, font_size = 19)
+```
+
+<br>
+```{r fig.height=5, fig.width=8}
+psm %>%
+  group_by(Fraction) %>%
+  summarise(n_peptides = n_distinct(Peptide),
+            n_proteins = n_distinct(Protein)) %>%
+  arrange(as.numeric(sub("M", "", Fraction))) %>%
+  tidyr::pivot_longer(!Fraction, names_to = "type", values_to = "n") %>%
+  mutate(Fraction = factor(Fraction, levels = unique(Fraction))) %>%
+  ggplot(aes(Fraction, n, fill = type)) +
+  geom_col(position = "dodge", alpha = 0.7, color = "grey20") +
+  geom_text(aes(label = n),
+            position = position_dodge(width = 0.9),
+            angle = 90,
+            vjust = 0.5,
+            hjust = -0.2,
+            size = 3) +
+  scale_fill_manual(values = c("n_peptides" = "steelblue",
+                               "n_proteins" = "darkolivegreen"),
+                    labels = c("Unique peptides", "Unique proteins")) +
+  theme_classic() +
+  scale_y_continuous(expand = c(0, 0),
+                     limits = c(0, max(psm %>%
+                                        group_by(Fraction) %>%
+                                        summarise(n_peptides = n_distinct(Peptide),
+                                                  n_proteins = n_distinct(Protein)) %>%
+                                        tidyr::pivot_longer(!Fraction, names_to = "type", values_to = "n") %>%
+                                        pull(n)) * 1.1)) +  # +10% arriba
+  labs(x = "Fraction", y = "Count", fill = NULL,
+       title = "Unique peptides and proteins per fraction")
+```
+
+### Jaccard index — Peptides
+<br>
+```{r fig.height=6, fig.width=7}
+# Heatmap peptides
+mat_long_pep <- as.data.frame(matrix_peptides) %>%
+  tibble::rownames_to_column("Fraction_x") %>%
+  tidyr::pivot_longer(!Fraction_x,
+                      names_to = "Fraction_y",
+                      values_to = "jaccard") %>%
+  mutate(Fraction_x = factor(Fraction_x, levels = rownames(matrix_peptides)),
+         Fraction_y = factor(Fraction_y, levels = rownames(matrix_peptides)))
+
+ggplot(mat_long_pep, aes(Fraction_x, Fraction_y, fill = jaccard)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(jaccard, 2)), size = 3) +
+  scale_fill_gradient(low = "white", high = "steelblue",
+                      name = "Jaccard (%)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = NULL,
+       title = "Peptide overlap between fractions (Jaccard %)")
+```
+
+### Jaccard index — Proteins
+<br>
+```{r fig.height=6, fig.width=7}
+# Heatmap proteins
+mat_long_prot <- as.data.frame(matrix_proteins) %>%
+  tibble::rownames_to_column("Fraction_x") %>%
+  tidyr::pivot_longer(!Fraction_x,
+                      names_to = "Fraction_y",
+                      values_to = "jaccard") %>%
+  mutate(Fraction_x = factor(Fraction_x, levels = rownames(matrix_proteins)),
+         Fraction_y = factor(Fraction_y, levels = rownames(matrix_proteins)))
+
+ggplot(mat_long_prot, aes(Fraction_x, Fraction_y, fill = jaccard)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(jaccard, 2)), size = 3) +
+  scale_fill_gradient(low = "white", high = "darkolivegreen",
+                      name = "Jaccard (%)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = NULL,
+       title = "Protein overlap between fractions (Jaccard %)")
+```

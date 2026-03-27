@@ -8,7 +8,7 @@ options(shiny.maxRequestSize = 50 * 1024^2)
 ui <- navbarPage(
   title = "ProteoLab Suite",
   
-  # ── Pestaña 1: Ratio Check ─────────────────────────────────────────────
+  # Tab 1: Ratio Check ---------------------------------------------------------
   tabPanel("Ratio Check",
            sidebarLayout(
              sidebarPanel(
@@ -27,12 +27,11 @@ ui <- navbarPage(
            )
   ),
   
-  # ── Pestaña 2: Overlap ─────────────────────────────────────────────────
+  # Tab 2: Overlap -------------------------------------------------------------
   tabPanel("Overlap",
            sidebarLayout(
              sidebarPanel(
                fileInput("data_ov", "Upload file for overlap analysis:"),
-               # → Aquí irán los inputs específicos de overlap_report.Rmd
                actionButton("generar_ov", "Generate overlap report")
              ),
              mainPanel(
@@ -91,7 +90,7 @@ server <- function(input, output, session) {
     ui <- navbarPage(
       title = "ProteoLab Suite",
       
-      # Tab 1: Ratio Check ---------------------------------------------------------
+      # Tab 1: Ratio Check -----------------------------------------------------
       tabPanel("Ratio Check",
                sidebarLayout(
                  sidebarPanel(
@@ -110,7 +109,7 @@ server <- function(input, output, session) {
                )
       ),
       
-      # Tab 2: Overlap -------------------------------------------------------------
+      # Tab 2: Overlap ---------------------------------------------------------
       tabPanel("Overlap",
                sidebarLayout(
                  sidebarPanel(
@@ -127,7 +126,7 @@ server <- function(input, output, session) {
     # Server
     server <- function(input, output, session) {
       
-      # Ratio Check ----------------------------------------------------------------
+      # Ratio Check ------------------------------------------------------------
       
       # Reactive para guardar temporalmente la ruta del archivo generado
       archivo_tmp <- reactiveVal(NULL)
@@ -179,7 +178,7 @@ server <- function(input, output, session) {
         }
       )
       
-      # Overlap --------------------------------------------------------------------
+      # Overlap ----------------------------------------------------------------
       
       # Reactive para guardar temporalmente la ruta del archivo generado
       archivo_tmp_ov <- reactiveVal(NULL)
@@ -233,7 +232,7 @@ server <- function(input, output, session) {
     }
   )
   
-  # ── Overlap ────────────────────────────────────────────────────────────
+  # Overlap --------------------------------------------------------------------
   
   # Reactive para guardar temporalmente la ruta del archivo generado
   archivo_tmp_ov <- reactiveVal(NULL)
@@ -249,7 +248,6 @@ server <- function(input, output, session) {
       output_file = tmpfile_ov,
       params = list(
         data = input$data_ov$datapath
-        # → Añadir aquí los params que defina en overlap_report.Rmd
       ),
       envir = new.env(parent = globalenv())
     )

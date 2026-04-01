@@ -136,7 +136,7 @@ plot_jaccard_heatmap <- function(mat, fill_color, plot_title) {
       na.value = "transparent",
       name     = "Jaccard (%)"
     ) +
-    labs(x = NULL, y = NULL, title = plot_title) +
+    labs(x = "Fraction", y = "Fraction", title = plot_title) +
     theme_classic() +
     theme(
       axis.text.x  = element_text(hjust = 0.5),

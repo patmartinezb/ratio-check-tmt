@@ -107,7 +107,7 @@ protein_matrix <- build_jaccard_matrix(protein_dict)
 
 ```{r heatmap-function}
 # Reusable heatmap builder — lower triangle only
-plot_jaccard_heatmap <- function(mat, fill_color, plot_title) {
+plot_jaccard_heatmap <- function(mat, color_mid, color_high, plot_title) {
 
   fraction_order <- rownames(mat)
 
@@ -130,12 +130,14 @@ plot_jaccard_heatmap <- function(mat, fill_color, plot_title) {
   ggplot(df_long, aes(x = fraction_col, y = fraction_row, fill = jaccard)) +
     geom_tile(color = "white") +
     geom_text(aes(label = jaccard), size = 3) +
-    scale_fill_gradient(
-      low      = "#f5f5f5",
-      high     = fill_color,
-      na.value = "transparent",
-      name     = "Jaccard (%)"
-    ) +
+  scale_fill_gradient2(
+    low      = "#f5f5f5",
+    mid      = color_mid,
+    high     = color_high,
+    midpoint = 50,
+    na.value = "transparent",
+    name     = "Jaccard (%)"
+  )+
     labs(x = "Fraction", y = "Fraction", title = plot_title) +
     theme_classic() +
     theme(
@@ -147,7 +149,7 @@ plot_jaccard_heatmap <- function(mat, fill_color, plot_title) {
 
 ---
 
-### Overall summary
+## Overall summary
 
 ```{r summary-table}
 data.frame(
@@ -192,8 +194,8 @@ ggplot(bar_data, aes(x = Fraction, y = Count, fill = Type)) +
   ) +
   scale_fill_manual(
     values = c(
-      "Number_of_Peptides" = "steelblue",
-      "Number_of_Proteins" = "lightpink"
+      "Number_of_Peptides" = "royalblue",
+      "Number_of_Proteins" = "deeppink2"
     ),
     labels = c(
       "Number_of_Peptides" = "Peptides",
@@ -212,6 +214,16 @@ ggplot(bar_data, aes(x = Fraction, y = Count, fill = Type)) +
 
 ---
 
+## Jaccard Index
+
+The Jaccard index quantifies the overlap between two fractions as the percentage of shared elements out of all unique elements combined:
+
+$$J(A,B) = \frac{|A \cap B|}{|A \cup B|} \times 100$$
+
+A value of **0%** means the two fractions share no peptides or proteins (perfect separation), while **100%** indicates that both fractions are identical. In a well-resolved fractionation experiment, off-diagonal values are expected to be low. High overlap between adjacent fractions may suggest insufficient chromatographic resolution.
+
+<br>
+
 ### Jaccard index — Peptides
 
 <br>
@@ -219,7 +231,8 @@ ggplot(bar_data, aes(x = Fraction, y = Count, fill = Type)) +
 ```{r heatmap-peptides, fig.height=6, fig.width=7}
 plot_jaccard_heatmap(
   mat        = peptide_matrix,
-  fill_color = "steelblue",
+  color_mid  = "skyblue",
+  color_high = "royalblue",
   plot_title = "Peptide overlap between fractions (Jaccard %)"
 )
 ```
@@ -233,7 +246,8 @@ plot_jaccard_heatmap(
 ```{r heatmap-proteins, fig.height=6, fig.width=7}
 plot_jaccard_heatmap(
   mat        = protein_matrix,
-  fill_color = "lightpink",
+  color_mid  = "lightpink",
+  color_high = "deeppink2",
   plot_title = "Protein overlap between fractions (Jaccard %)"
 )
 ```

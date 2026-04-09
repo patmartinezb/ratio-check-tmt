@@ -42,8 +42,7 @@ raw_psm <- read.delim(
 
 # Keep only unique PSMs and extract fraction label
 psm <- raw_psm %>%
-  filter(Is.Unique == "true") %>%
-  mutate(Fraction = str_extract(Spectrum, "M\\d+")) %>%
+  mutate(Fraction = str_extract(`Spectrum.File`, "(?<=([\\\\/]))[^\\\\/.]+(?=\\.)")) %>%
   select(Fraction, Peptide, Protein)
 
 n_fractions <- n_distinct(psm$Fraction)
@@ -58,7 +57,7 @@ peptide_dict <- psm %>%
     Number_of_Peptides = n_distinct(Peptide),
     .groups = "drop"
   ) %>%
-  arrange(as.numeric(gsub("M", "", Fraction)))
+  arrange(as.numeric(str_extract(Fraction, "\\d+$")))
 
 protein_dict <- psm %>%
   group_by(Fraction) %>%
@@ -67,7 +66,7 @@ protein_dict <- psm %>%
     Number_of_Proteins = n_distinct(Protein),
     .groups = "drop"
   ) %>%
-  arrange(as.numeric(gsub("M", "", Fraction)))
+  arrange(as.numeric(str_extract(Fraction, "\\d+$")))
 ```
 
 ```{r jaccard-functions}
@@ -141,13 +140,13 @@ plot_jaccard_heatmap <- function(mat, color_mid, color_high, plot_title) {
     labs(x = "Fraction", y = "Fraction", title = plot_title) +
     theme_classic() +
     theme(
-      axis.text.x  = element_text(hjust = 0.5),
+      axis.text.x  = element_text(angle = 45, hjust = 1),
       aspect.ratio = 1
     )
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ## Overall summary
 
@@ -209,10 +208,11 @@ ggplot(bar_data, aes(x = Fraction, y = Count, fill = Type)) +
     y     = "Count",
     title = "Unique peptides and proteins per fraction"
   ) +
-  theme_classic()
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
----
+------------------------------------------------------------------------
 
 ## Jaccard Index
 
@@ -237,7 +237,7 @@ plot_jaccard_heatmap(
 )
 ```
 
----
+------------------------------------------------------------------------
 
 ### Jaccard index — Proteins
 
@@ -251,3 +251,23 @@ plot_jaccard_heatmap(
   plot_title = "Protein overlap between fractions (Jaccard %)"
 )
 ```
+
+<hr>
+
+<footer style="font-size: 0.75em; color: #555;">
+
+<p><strong>For improvements, suggestions, optimizations, and inquiries, contact:</strong></p>
+
+<p style="text-indent: 2em;">
+
+Patricia Martínez — <a href="mailto:patricia.martinez@ispasturias.es">patricia.martinez\@ispasturias.es</a>
+
+</p>
+
+<p style="text-indent: 2em;">
+
+Sergio Carrascal — <a href="mailto:sergio.carrascal@ispasturias.es">sergio.carrascal\@ispasturias.es</a>
+
+</p>
+
+</footer>

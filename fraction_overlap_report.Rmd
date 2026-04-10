@@ -114,7 +114,7 @@ plot_jaccard_heatmap <- function(mat, color_mid, color_high, plot_title) {
   mat_lower           <- mat
   mat_lower[upper.tri(mat_lower)] <- NA
 
-  # Convert to long format without extra packages
+  # Convert to long format
   df_long <- data.frame(
     fraction_row = rep(rownames(mat_lower), times = ncol(mat_lower)),
     fraction_col = rep(colnames(mat_lower), each  = nrow(mat_lower)),

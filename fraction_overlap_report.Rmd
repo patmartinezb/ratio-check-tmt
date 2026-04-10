@@ -1,0 +1,273 @@
+---
+title: "Overlap Report"
+author: "Proteomics and Proteostasis Lab"
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+output:
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float:
+      collapsed: true
+params:
+  data:
+    label: "Upload PSM file (.tsv):"
+    input: file
+    value: NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+```
+
+```{r libraries}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+library(kableExtra)
+```
+
+```{r load-and-filter}
+# Load raw data
+raw_psm <- read.delim(
+  params$data,
+  header = TRUE,
+  sep    = "\t"
+)
+
+# Keep only unique PSMs and extract fraction label
+psm <- raw_psm %>%
+  mutate(Fraction = str_extract(`Spectrum.File`, "(?<=([\\\\/]))[^\\\\/.]+(?=\\.)")) %>%
+  select(Fraction, Peptide, Protein)
+
+n_fractions <- n_distinct(psm$Fraction)
+```
+
+```{r build-sets}
+# One row per fraction: list of unique peptides / proteins
+peptide_dict <- psm %>%
+  group_by(Fraction) %>%
+  summarise(
+    Peptides           = list(unique(gsub(" ", "", Peptide))),
+    Number_of_Peptides = n_distinct(Peptide),
+    .groups = "drop"
+  ) %>%
+  arrange(as.numeric(str_extract(Fraction, "\\d+$")))
+
+protein_dict <- psm %>%
+  group_by(Fraction) %>%
+  summarise(
+    Proteins           = list(unique(Protein)),
+    Number_of_Proteins = n_distinct(Protein),
+    .groups = "drop"
+  ) %>%
+  arrange(as.numeric(str_extract(Fraction, "\\d+$")))
+```
+
+```{r jaccard-functions}
+# Jaccard index between two elements of a set-list data frame
+jaccard_pair <- function(dict, i, j, col = 2) {
+  a     <- dict[[col]][[i]]
+  b     <- dict[[col]][[j]]
+  inter <- length(intersect(a, b))
+  union <- length(union(a, b))
+  if (union == 0) return(NA_real_)
+  (inter / union) * 100
+}
+
+# Full symmetric Jaccard matrix
+build_jaccard_matrix <- function(dict) {
+  n      <- nrow(dict)
+  labels <- dict$Fraction
+  mat    <- matrix(
+    NA_real_,
+    nrow     = n,
+    ncol     = n,
+    dimnames = list(labels, labels)
+  )
+  for (i in seq_len(n)) {
+    for (j in i:n) {
+      score     <- jaccard_pair(dict, i, j, col = 2)
+      mat[i, j] <- score
+      mat[j, i] <- score
+    }
+  }
+  mat
+}
+
+peptide_matrix <- build_jaccard_matrix(peptide_dict)
+protein_matrix <- build_jaccard_matrix(protein_dict)
+```
+
+```{r heatmap-function}
+# Reusable heatmap builder — lower triangle only
+plot_jaccard_heatmap <- function(mat, color_mid, color_high, plot_title) {
+
+  fraction_order <- rownames(mat)
+
+  # Keep only lower triangle
+  mat_lower           <- mat
+  mat_lower[upper.tri(mat_lower)] <- NA
+
+  # Convert to long format
+  df_long <- data.frame(
+    fraction_row = rep(rownames(mat_lower), times = ncol(mat_lower)),
+    fraction_col = rep(colnames(mat_lower), each  = nrow(mat_lower)),
+    jaccard      = as.vector(mat_lower)
+  )
+
+  df_long <- df_long[!is.na(df_long$jaccard), ]
+  df_long$jaccard      <- round(df_long$jaccard, 2)
+  df_long$fraction_row <- factor(df_long$fraction_row, levels = fraction_order)
+  df_long$fraction_col <- factor(df_long$fraction_col, levels = fraction_order)
+
+  ggplot(df_long, aes(x = fraction_col, y = fraction_row, fill = jaccard)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = jaccard), size = 3) +
+  scale_fill_gradient2(
+    low      = "#f5f5f5",
+    mid      = color_mid,
+    high     = color_high,
+    midpoint = 50,
+    na.value = "transparent",
+    name     = "Jaccard (%)"
+  )+
+    labs(x = "Fraction", y = "Fraction", title = plot_title) +
+    theme_classic() +
+    theme(
+      axis.text.x  = element_text(angle = 45, hjust = 1),
+      aspect.ratio = 1
+    )
+}
+```
+
+------------------------------------------------------------------------
+
+## Overall summary
+
+```{r summary-table}
+data.frame(
+  Metric = c(
+    "Total PSMs (raw)",
+    "PSMs after filtering (unique)",
+    "Fractions detected",
+    "Unique peptides",
+    "Unique proteins"
+  ),
+  Value = c(
+    nrow(raw_psm),
+    nrow(psm),
+    n_fractions,
+    n_distinct(psm$Peptide),
+    n_distinct(psm$Protein)
+  )
+) %>%
+  kbl() %>%
+  kable_paper("hover", full_width = FALSE, font_size = 17)
+```
+
+<br>
+
+```{r barplot, fig.height=5, fig.width=8}
+bar_data <- inner_join(
+    peptide_dict %>% select(Fraction, Number_of_Peptides),
+    protein_dict %>% select(Fraction, Number_of_Proteins),
+    by = "Fraction"
+  ) %>%
+  mutate(Fraction = factor(Fraction, levels = unique(Fraction))) %>%
+  pivot_longer(-Fraction, names_to = "Type", values_to = "Count")
+
+y_max <- max(bar_data$Count) * 1.12
+
+ggplot(bar_data, aes(x = Fraction, y = Count, fill = Type)) +
+  geom_col(position = "dodge", alpha = 0.75, color = "grey25") +
+  geom_text(
+    aes(label = Count),
+    position = position_dodge(width = 0.9),
+    angle = 90, vjust = 0.5, hjust = -0.15, size = 3
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Number_of_Peptides" = "royalblue",
+      "Number_of_Proteins" = "deeppink2"
+    ),
+    labels = c(
+      "Number_of_Peptides" = "Peptides",
+      "Number_of_Proteins" = "Proteins"
+    ),
+    name = NULL
+  ) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, y_max)) +
+  labs(
+    x     = "Fraction",
+    y     = "Count",
+    title = "Unique peptides and proteins per fraction"
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+------------------------------------------------------------------------
+
+## Jaccard Index
+
+The Jaccard index quantifies the overlap between two fractions as the percentage of shared elements out of all unique elements combined:
+
+$$J(A,B) = \frac{|A \cap B|}{|A \cup B|} \times 100$$
+
+A value of **0%** means the two fractions share no peptides or proteins (perfect separation), while **100%** indicates that both fractions are identical. In a well-resolved fractionation experiment, off-diagonal values are expected to be low. High overlap between adjacent fractions may suggest insufficient chromatographic resolution.
+
+<br>
+
+### Jaccard index — Peptides
+
+<br>
+
+```{r heatmap-peptides, fig.height=6, fig.width=7}
+plot_jaccard_heatmap(
+  mat        = peptide_matrix,
+  color_mid  = "skyblue",
+  color_high = "royalblue",
+  plot_title = "Peptide overlap between fractions (Jaccard %)"
+)
+```
+
+------------------------------------------------------------------------
+
+### Jaccard index — Proteins
+
+<br>
+
+```{r heatmap-proteins, fig.height=6, fig.width=7}
+plot_jaccard_heatmap(
+  mat        = protein_matrix,
+  color_mid  = "lightpink",
+  color_high = "deeppink2",
+  plot_title = "Protein overlap between fractions (Jaccard %)"
+)
+```
+
+<hr>
+
+<footer style="font-size: 0.75em; color: #555;">
+
+<p><strong>For improvements, suggestions, optimizations, and inquiries, contact:</strong></p>
+
+<p style="text-indent: 2em;">
+
+Patricia Martínez — <a href="mailto:patricia.martinez@ispasturias.es">patricia.martinez\@ispasturias.es</a>
+
+</p>
+
+<p style="text-indent: 2em;">
+
+Sergio Carrascal — <a href="mailto:sergio.carrascal@ispasturias.es">sergio.carrascal\@ispasturias.es</a>
+
+</p>
+
+</footer>

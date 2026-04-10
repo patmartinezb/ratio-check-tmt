@@ -1,6 +1,6 @@
 ---
 title: "Ratio check report"
-author: "Patricia Martínez-Botía"
+author: "Proteomics and Proteostasis Lab"
 date: "`r format(Sys.time(), '%d/%m/%y')`"
 output: 
   html_document:
@@ -35,6 +35,15 @@ knitr::opts_chunk$set(echo = FALSE,
                       warning = FALSE,
                       message = FALSE,
                       fig.align = "center")
+
+# Ensure tmt is always a single non-null string
+tmt_type <- if (!is.null(params$tmt) && length(params$tmt) == 1) {
+  as.character(params$tmt)
+} else {
+  "tmtpro"
+}
+
+is_tmt <- tmt_type != "tmtzero"
 ```
 
 ```{r}
@@ -47,40 +56,37 @@ library(kableExtra)
 ```
 
 ```{r}
-# Load data
-df_psm <- readr::read_delim(params$data, 
-                     delim = "\t", 
-                     escape_double = FALSE, 
-                     trim_ws = TRUE) %>% 
+# Load PSM data (always required)
+df_psm <- readr::read_delim(params$data,
+                            delim = "\t",
+                            escape_double = FALSE,
+                            trim_ws = TRUE) %>%
   janitor::clean_names() %>%
-  dplyr::rename_with(.,
-                     ~ gsub("intensity_", "", .x),
-                     starts_with("intensity_")) %>% 
+  dplyr::rename_with(~ gsub("intensity_", "", .x),
+                     starts_with("intensity_")) %>%
   dplyr::select(!dplyr::starts_with("na_"))
 
-anno_psm <- readr::read_table(params$anno,
-                       col_names = FALSE) %>% 
-  rename(channel = X1,
-         key = X2) %>% 
-  filter(!is.na(key)) %>% 
-  mutate(key = janitor::make_clean_names(key))
+# Annotation file and TMT regex patterns only needed for TMT / TMTpro
+if (is_tmt) {
 
-if (params$tmt == "tmtpro"){
-  tmt = "K\\(304\\.2072\\)"
-} else {
-  tmt = "K\\(229\\.16293\\)"
+  anno_psm <- readr::read_table(params$anno, col_names = FALSE) %>%
+    rename(channel = X1, key = X2) %>%
+    filter(!is.na(key)) %>%
+    mutate(key = janitor::make_clean_names(key))
+
+  tmt_regex <- if (tmt_type == "tmtpro") {
+    "K\\(304\\.2072\\)"
+  } else {
+    "K\\(229\\.16293\\)"
+  }
+
+  if (isTRUE(params$tmtextra)) {
+    foo  <- gsub("\\\\.", "\\.", stringr::str_extract(tmt_regex, "[0-9]+\\\\.[0-9]+"))
+    tmt2 <- round(as.numeric(foo) * 2, 3)
+    tmt2 <- paste0("K\\(", gsub("\\.", "\\\\.", tmt2))
+  }
+
 }
-
-if (params$tmtextra == TRUE){
-  
-  foo <- gsub("\\\\.", "\\.", stringr::str_extract(tmt, "[0-9]+\\\\.[0-9]+"))
-  
-  tmt2 <- round(as.numeric(foo) * 2, 3)
-  
-  tmt2 <- paste0("K\\(", gsub("\\.", "\\\\.", tmt2))
-  
-}
-
 ```
 
 ### Overall information
@@ -88,13 +94,9 @@ if (params$tmtextra == TRUE){
 ```{r}
 total_peptides <- nrow(df_psm)
 unique_peptides <- df_psm %>% distinct(peptide) %>% nrow()
-total_protein <- length(unique(df_psm$protein_id))
-# reverse hits
-# contaminants
+total_protein   <- length(unique(df_psm$protein_id))
 
-t(data.frame(total_peptides,
-           unique_peptides,
-           total_protein)) %>% 
+t(data.frame(total_peptides, unique_peptides, total_protein)) %>%
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19)
 ```
@@ -102,51 +104,42 @@ t(data.frame(total_peptides,
 <br>
 
 ```{r fig.height=6, fig.width=10}
-m_cle <- df_psm %>% 
-  select(number_of_missed_cleavages) %>% 
+m_cle <- df_psm %>%
+  select(number_of_missed_cleavages) %>%
   mutate(number_of_missed_cleavages = as.factor(number_of_missed_cleavages)) %>%
-  group_by(number_of_missed_cleavages) %>% 
-  count() %>% 
+  group_by(number_of_missed_cleavages) %>%
+  count() %>%
   ggplot(aes(number_of_missed_cleavages, n)) +
-  geom_col(fill = "darkolivegreen",
-           alpha = .6,
-           color = "grey20") +
+  geom_col(fill = "darkolivegreen", alpha = .6, color = "grey20") +
   theme_classic() +
   scale_y_continuous(expand = c(0.03, 0.1)) +
-  geom_text(aes(label = paste0(n, " - ", round(n/nrow(df_psm)*100, 2), "%")),
+  geom_text(aes(label = paste0(n, " - ", round(n / nrow(df_psm) * 100, 2), "%")),
             vjust = -.2) +
-  labs(x = "# of missed cleavages",
-       y = "# of PSMs (%)",
+  labs(x = "# of missed cleavages", y = "# of PSMs (%)",
        title = "Distribution of missed cleavages")
 
-charge <- df_psm %>% 
-  select(charge) %>% 
+charge <- df_psm %>%
+  select(charge) %>%
   mutate(charge = as.factor(charge)) %>%
-  group_by(charge) %>% 
-  count() %>% 
+  group_by(charge) %>%
+  count() %>%
   ggplot(aes(charge, n)) +
-  geom_col(fill = "skyblue",
-           alpha = .6,
-           color = "grey20") +
+  geom_col(fill = "skyblue", alpha = .6, color = "grey20") +
   theme_classic() +
   scale_y_continuous(expand = c(0.03, 0.1)) +
-  geom_text(aes(label = paste0(n, " - ", round(n/nrow(df_psm)*100, 2), "%")),
+  geom_text(aes(label = paste0(n, " - ", round(n / nrow(df_psm) * 100, 2), "%")),
             vjust = -.2) +
-  labs(x = "Charge (z)",
-       y = "# of PSMs (%)",
+  labs(x = "Charge (z)", y = "# of PSMs (%)",
        title = "Distribution of charge")
 
-
-ggpubr::ggarrange(m_cle,
-                  charge,
-                  ncol = 2)
+ggpubr::ggarrange(m_cle, charge, ncol = 2)
 ```
 
 <br>
 
 ```{r}
-df_psm %>% 
-  mutate(retention = retention/60) %>% 
+df_psm %>%
+  mutate(retention = retention / 60) %>%
   ggplot(aes(retention, intensity)) +
   geom_line(color = "darkblue") +
   theme_classic() +
@@ -154,83 +147,84 @@ df_psm %>%
        y = "Intensity",
        title = "Base peak chromatogram") +
   scale_y_continuous(expand = c(0, 0.1)) +
-  scale_x_continuous(breaks = seq(0,140,20))
+  scale_x_continuous(breaks = seq(0, 140, 20))
 ```
 
+```{r eval=is_tmt, results='asis'}
+cat("### Percentage of modified peptides")
+```
 
-### Percentage of modified peptides
+```{r eval=is_tmt}
+df_label <- df_psm %>%
+  select(peptide, 
+         assigned_modifications) %>%
+  mutate(is_M            = grepl("15.9949", assigned_modifications),
+         is_K_tmt        = grepl(tmt_regex, assigned_modifications),
+         is_nterm_tmt    = grepl("N-term", assigned_modifications),
+         has_M           = grepl("M", peptide),
+         has_K           = grepl("K", peptide),
+         potential_nterm = TRUE) %>%
+  pivot_longer(!c(peptide, assigned_modifications),
+               names_to = "mod", values_to = "status") %>%
+  filter(status == TRUE) %>%
+  group_by(mod) %>%
+  count() %>%
+  pivot_wider(names_from = mod, values_from = n) %>%
+  mutate(perc_M         = round(is_M / has_M * 100, 2),
+         perc_K_tmt     = round(is_K_tmt / has_K * 100, 2),
+         perc_nterm_tmt = round(is_nterm_tmt / potential_nterm * 100, 2)) %>%
+  select(starts_with("perc"))
 
-```{r}
-
-df_label <- df_psm %>% 
-  select(peptide,
-         assigned_modifications) %>% 
-  mutate(is_M = grepl("15.9949", assigned_modifications),
-         is_K_tmt = grepl(tmt, assigned_modifications),
-         is_nterm_tmt = grepl("N-term", assigned_modifications),
-         has_M = grepl("M", peptide),
-         has_K = grepl("K", peptide),
-         potential_nterm = TRUE) %>% 
-  pivot_longer(!c(peptide, assigned_modifications), names_to = "mod", values_to = "status") %>%
-  filter(status == TRUE) %>% 
-  group_by(mod) %>% 
-  count() %>% 
-  pivot_wider(names_from = mod, values_from = n) %>% 
-  mutate(perc_M = round(is_M/has_M*100, 2),
-         perc_K_tmt = round(is_K_tmt/has_K*100, 2),
-         perc_nterm_tmt = round(is_nterm_tmt/potential_nterm*100, 2)) %>% 
-  select(starts_with("perc")) 
-
-if (exists("tmt2")){
-  
+if (exists("tmt2")) {
   df_tmt2 <- df_psm %>%
-    select(peptide,
-         assigned_modifications) %>% 
-    mutate(has_K = grepl("K", peptide),
-           is_K_tmt2 = grepl(tmt2, assigned_modifications)) %>% 
-    pivot_longer(!c(peptide, assigned_modifications), 
-                 names_to = "mod", 
+    select(peptide, 
+           assigned_modifications) %>%
+    mutate(has_K     = grepl("K", peptide),
+           is_K_tmt2 = grepl(tmt2, assigned_modifications)) %>%
+    pivot_longer(!c(peptide, assigned_modifications),
+                 names_to = "mod",
                  values_to = "status") %>%
-    filter(status == TRUE) %>% 
-    group_by(mod) %>% 
-    count() %>% 
-    pivot_wider(names_from = mod, values_from = n) %>% 
-    mutate(perc_K_tmt2 = round(is_K_tmt2/has_K*100, 2)) %>% 
+    filter(status == TRUE) %>%
+    group_by(mod) %>%
+    count() %>%
+    pivot_wider(names_from = mod, values_from = n) %>%
+    mutate(perc_K_tmt2 = round(is_K_tmt2 / has_K * 100, 2)) %>%
     select(starts_with("perc"))
-  
+
   df_label <- cbind(df_label,
                     df_tmt2)
-    
 }
 
 df_label %>%
-  t() %>% 
+  t() %>%
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19)
 ```
 
-### Ratio check
+```{r eval=is_tmt, results='asis'}
+cat("### Ratio check")
+```
 
-```{r}
-df_ratio_psm <- df_psm %>% 
+```{r eval=is_tmt}
+df_ratio_psm <- df_psm %>%
   select(peptide,
-         any_of(anno_psm$key)) %>% 
+         any_of(anno_psm$key)) %>%
   pivot_longer(!peptide, names_to = "key", values_to = "vals") %>%
-  left_join(anno_psm, by = "key") %>% 
-  group_by(channel) %>% 
-  summarise(sum = sum(vals)) %>% 
-  mutate(ratio = sum/max(sum),
-         pq_ratio = max(sum)/sum,
-         channel = factor(channel,
-                          levels = anno_psm$channel))
+  left_join(anno_psm, by = "key") %>%
+  group_by(channel) %>%
+  summarise(sum = sum(vals)) %>%
+  mutate(ratio    = sum / max(sum),
+         pq_ratio = max(sum) / sum,
+         channel  = factor(channel,
+                           levels = anno_psm$channel))
 
 df_ratio_psm %>%
-  left_join(anno_psm, by = "channel") %>% 
+  left_join(anno_psm, by = "channel") %>%
   rename(sample = key) %>%
-  mutate(ratio = round(ratio, 2),
+  mutate(ratio    = round(ratio, 2),
          pq_ratio = round(pq_ratio, 2)) %>%
   select(-sum) %>%
-  relocate(sample, .before = 1) %>% 
+  relocate(sample, .before = 1) %>%
   arrange(factor(channel, levels = anno_psm$channel)) %>%
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19)
@@ -238,39 +232,39 @@ df_ratio_psm %>%
 
 <br>
 
-```{r}
-df_ratio_psm %>% 
+```{r eval=is_tmt}
+df_ratio_psm %>%
   ggplot(aes(channel, ratio)) +
-  geom_col(fill = rainbow(nrow(anno_psm)),
+  geom_col(fill  = rainbow(nrow(anno_psm)),
            color = "grey20",
            alpha = .5) +
   theme_classic() +
   scale_y_continuous(expand = c(0, 0)) +
   geom_text(aes(label = round(ratio, 3)),
-            angle = 90, hjust = 1.5) +
+            angle = 90,
+            hjust = 1.5) +
   labs(x = "Channel",
        y = "Ratio")
 ```
 
+```{r eval=is_tmt, results='asis'}
+cat("### Volume\n\nVolumes (uL) per sample:")
+```
 
-### Volume
-
-Volumes (uL) per sample:
-
-```{r}
-df_ratio_psm %>% 
-  mutate(volume = round(params$volume * pq_ratio/max(pq_ratio), 1)) %>%
-  left_join(anno_psm, by = "channel") %>% 
-  rename(sample = key) %>% 
+```{r eval=is_tmt}
+df_ratio_psm %>%
+  mutate(volume = round(params$volume * pq_ratio / max(pq_ratio), 1)) %>%
+  left_join(anno_psm, by = "channel") %>%
+  rename(sample = key) %>%
   select(sample,
          channel,
-         volume) %>% 
-  arrange(factor(channel, levels = anno_psm$channel)) %>% 
+         volume) %>%
+  arrange(factor(channel, levels = anno_psm$channel)) %>%
   janitor::adorn_totals("row", fill = "Total volume") %>%
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19) %>%
-  column_spec(3, background = "lightblue") %>% 
-  row_spec(nrow(anno_psm)+1, background = "salmon")
+  column_spec(3, background = "lightblue") %>%
+  row_spec(nrow(anno_psm) + 1, background = "salmon")
   # footnote(general = "Volume is reported in uL",
   #          general_title = "",
   #          fixed_small_size = T)
@@ -278,21 +272,40 @@ df_ratio_psm %>%
 
 <br>
 
-To go from 26.6% to a 3% of ACN, the following volume (uL) of 5% formic acid has to be added to the total volume:
+```{r eval=is_tmt, results='asis'}
+cat("To go from 26.6% to a 3% of ACN, the following volume (uL) of 5% formic acid has to be added to the total volume:")
+```
 
-```{r}
-df_ratio_psm %>% 
-  mutate(vol = params$volume * pq_ratio/max(pq_ratio)) %>% 
-  summarise(sum_vol = sum(vol)) %>% 
-  mutate(vol_fa = 26.6 * sum_vol / 3,
-         vol_fa = round(vol_fa, 2)) %>%
-  select(vol_fa) %>% 
-  t() %>% 
+```{r eval=is_tmt}
+df_ratio_psm %>%
+  mutate(vol = params$volume * pq_ratio / max(pq_ratio)) %>%
+  summarise(sum_vol = sum(vol)) %>%
+  mutate(vol_fa = round(26.6 * sum_vol / 3, 2)) %>%
+  select(vol_fa) %>%
+  t() %>%
   kbl() %>%
-  kable_paper("hover", full_width = F, font_size = 19) %>% 
-  row_spec(1, bold = T, color = "white", background = "#D7261E") 
+  kable_paper("hover", full_width = F, font_size = 19) %>%
+  row_spec(1, bold = T, color = "white", background = "#D7261E")
   # footnote(general = "Volume is reported in uL",
   #          general_title = "",
   #          fixed_small_size = T)
 ```
+<hr>
 
+<footer style="font-size: 0.75em; color: #555;">
+
+<p><strong>For improvements, suggestions, optimizations, and inquiries, contact:</strong></p>
+
+<p style="text-indent: 2em;">
+
+Patricia Martínez — <a href="mailto:patricia.martinez@ispasturias.es">patricia.martinez\@ispasturias.es</a>
+
+</p>
+
+<p style="text-indent: 2em;">
+
+Sergio Carrascal — <a href="mailto:sergio.carrascal@ispasturias.es">sergio.carrascal\@ispasturias.es</a>
+
+</p>
+
+</footer>

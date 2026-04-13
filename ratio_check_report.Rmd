@@ -43,7 +43,11 @@ tmt_type <- if (!is.null(params$tmt) && length(params$tmt) == 1) {
   "tmtpro"
 }
 
-is_tmt <- tmt_type != "tmtzero"
+is_tmt     <- tmt_type != "tmtzero"
+is_tmtzero <- tmt_type == "tmtzero"
+
+# Show modified peptides section for any TMT variant
+show_modifications <- is_tmt || is_tmtzero
 ```
 
 ```{r}
@@ -66,17 +70,13 @@ df_psm <- readr::read_delim(params$data,
                      starts_with("intensity_")) %>%
   dplyr::select(!dplyr::starts_with("na_"))
 
-# Annotation file and TMT regex patterns only needed for TMT / TMTpro
-if (is_tmt) {
-
-  anno_psm <- readr::read_table(params$anno, col_names = FALSE) %>%
-    rename(channel = X1, key = X2) %>%
-    filter(!is.na(key)) %>%
-    mutate(key = janitor::make_clean_names(key))
+# tmt_regex is needed for any TMT variant including tmtzero
+if (show_modifications) {
 
   tmt_regex <- if (tmt_type == "tmtpro") {
     "K\\(304\\.2072\\)"
   } else {
+    # tmt and tmtzero share the same backbone mass (229.16293)
     "K\\(229\\.16293\\)"
   }
 
@@ -85,6 +85,16 @@ if (is_tmt) {
     tmt2 <- round(as.numeric(foo) * 2, 3)
     tmt2 <- paste0("K\\(", gsub("\\.", "\\\\.", tmt2))
   }
+
+}
+
+# anno_psm is only needed for Ratio check and Volume sections (not tmtzero)
+if (is_tmt) {
+
+  anno_psm <- readr::read_table(params$anno, col_names = FALSE) %>%
+    rename(channel = X1, key = X2) %>%
+    filter(!is.na(key)) %>%
+    mutate(key = janitor::make_clean_names(key))
 
 }
 ```
@@ -150,49 +160,41 @@ df_psm %>%
   scale_x_continuous(breaks = seq(0, 140, 20))
 ```
 
-```{r eval=is_tmt, results='asis'}
+```{r eval=show_modifications, results='asis'}
 cat("### Percentage of modified peptides")
 ```
 
-```{r eval=is_tmt}
+```{r eval=show_modifications}
+# Count directly with summarise — avoids pivot_wider missing columns
+# when zero peptides match a condition
 df_label <- df_psm %>%
-  select(peptide, 
-         assigned_modifications) %>%
-  mutate(is_M            = grepl("15.9949", assigned_modifications),
-         is_K_tmt        = grepl(tmt_regex, assigned_modifications),
-         is_nterm_tmt    = grepl("N-term", assigned_modifications),
-         has_M           = grepl("M", peptide),
-         has_K           = grepl("K", peptide),
-         potential_nterm = TRUE) %>%
-  pivot_longer(!c(peptide, assigned_modifications),
-               names_to = "mod", values_to = "status") %>%
-  filter(status == TRUE) %>%
-  group_by(mod) %>%
-  count() %>%
-  pivot_wider(names_from = mod, values_from = n) %>%
-  mutate(perc_M         = round(is_M / has_M * 100, 2),
-         perc_K_tmt     = round(is_K_tmt / has_K * 100, 2),
-         perc_nterm_tmt = round(is_nterm_tmt / potential_nterm * 100, 2)) %>%
+  select(peptide, assigned_modifications) %>%
+  summarise(
+    has_M           = sum(grepl("M", peptide)),
+    has_K           = sum(grepl("K", peptide)),
+    is_M            = sum(grepl("15.9949", assigned_modifications)),
+    is_K_tmt        = sum(grepl(tmt_regex, assigned_modifications)),
+    is_nterm_tmt    = sum(grepl("N-term", assigned_modifications)),
+    potential_nterm = n()
+  ) %>%
+  mutate(
+    perc_M         = round(is_M / has_M * 100, 2),
+    perc_K_tmt     = round(is_K_tmt / has_K * 100, 2),
+    perc_nterm_tmt = round(is_nterm_tmt / potential_nterm * 100, 2)
+  ) %>%
   select(starts_with("perc"))
 
 if (exists("tmt2")) {
   df_tmt2 <- df_psm %>%
-    select(peptide, 
-           assigned_modifications) %>%
-    mutate(has_K     = grepl("K", peptide),
-           is_K_tmt2 = grepl(tmt2, assigned_modifications)) %>%
-    pivot_longer(!c(peptide, assigned_modifications),
-                 names_to = "mod",
-                 values_to = "status") %>%
-    filter(status == TRUE) %>%
-    group_by(mod) %>%
-    count() %>%
-    pivot_wider(names_from = mod, values_from = n) %>%
+    select(peptide, assigned_modifications) %>%
+    summarise(
+      has_K     = sum(grepl("K", peptide)),
+      is_K_tmt2 = sum(grepl(tmt2, assigned_modifications))
+    ) %>%
     mutate(perc_K_tmt2 = round(is_K_tmt2 / has_K * 100, 2)) %>%
     select(starts_with("perc"))
 
-  df_label <- cbind(df_label,
-                    df_tmt2)
+  df_label <- cbind(df_label, df_tmt2)
 }
 
 df_label %>%
@@ -265,9 +267,6 @@ df_ratio_psm %>%
   kable_paper("hover", full_width = F, font_size = 19) %>%
   column_spec(3, background = "lightblue") %>%
   row_spec(nrow(anno_psm) + 1, background = "salmon")
-  # footnote(general = "Volume is reported in uL",
-  #          general_title = "",
-  #          fixed_small_size = T)
 ```
 
 <br>
@@ -286,9 +285,6 @@ df_ratio_psm %>%
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19) %>%
   row_spec(1, bold = T, color = "white", background = "#D7261E")
-  # footnote(general = "Volume is reported in uL",
-  #          general_title = "",
-  #          fixed_small_size = T)
 ```
 <hr>
 

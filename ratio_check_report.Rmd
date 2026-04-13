@@ -46,7 +46,7 @@ tmt_type <- if (!is.null(params$tmt) && length(params$tmt) == 1) {
 is_tmt     <- tmt_type != "tmtzero"
 is_tmtzero <- tmt_type == "tmtzero"
 
-# Show modified peptides section for any TMT variant
+# Show modified peptides section for any TMT variant (including tmtzero)
 show_modifications <- is_tmt || is_tmtzero
 ```
 
@@ -75,9 +75,10 @@ if (show_modifications) {
 
   tmt_regex <- if (tmt_type == "tmtpro") {
     "K\\(304\\.2072\\)"
-  } else {
-    # tmt and tmtzero share the same backbone mass (229.16293)
+  } else if (tmt_type == "tmt") {
     "K\\(229\\.16293\\)"
+  } else {
+    "K\\(295\\.1896\\)"
   }
 
   if (isTRUE(params$tmtextra)) {
@@ -165,8 +166,6 @@ cat("### Percentage of modified peptides")
 ```
 
 ```{r eval=show_modifications}
-# Count directly with summarise — avoids pivot_wider missing columns
-# when zero peptides match a condition
 df_label <- df_psm %>%
   select(peptide, assigned_modifications) %>%
   summarise(

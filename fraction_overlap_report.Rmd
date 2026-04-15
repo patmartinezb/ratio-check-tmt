@@ -40,10 +40,16 @@ raw_psm <- read.delim(
   sep    = "\t"
 )
 
+n_psm <- nrow(raw_psm)
+
 # Keep only unique PSMs and extract fraction label
 psm <- raw_psm %>%
-  mutate(Fraction = str_extract(`Spectrum.File`, "(?<=([\\\\/]))[^\\\\/.]+(?=\\.)")) %>%
-  select(Fraction, Peptide, Protein)
+  mutate(
+    Fraction = str_extract(`Spectrum.File`, "(?<=([\\\\/]))[^\\\\/.]+(?=\\.)"),
+    PPM      = (`Delta.Mass` / `Calculated.Peptide.Mass`) * 1e6,
+    RT_min = (`Retention` / 60)) %>%
+  select(Fraction, Peptide, Protein, PPM, RT_min)
+
 
 n_fractions <- n_distinct(psm$Fraction)
 ```
@@ -76,7 +82,7 @@ jaccard_pair <- function(dict, i, j, col = 2) {
   b     <- dict[[col]][[j]]
   inter <- length(intersect(a, b))
   union <- length(union(a, b))
-  if (union == 0) return(NA_real_)
+  if (union == 0) return(NA)
   (inter / union) * 100
 }
 
@@ -85,7 +91,7 @@ build_jaccard_matrix <- function(dict) {
   n      <- nrow(dict)
   labels <- dict$Fraction
   mat    <- matrix(
-    NA_real_,
+    NA,
     nrow     = n,
     ncol     = n,
     dimnames = list(labels, labels)
@@ -153,15 +159,13 @@ plot_jaccard_heatmap <- function(mat, color_mid, color_high, plot_title) {
 ```{r summary-table}
 data.frame(
   Metric = c(
-    "Total PSMs (raw)",
-    "PSMs after filtering (unique)",
+    "Total PSMs",
     "Fractions detected",
     "Unique peptides",
     "Unique proteins"
   ),
   Value = c(
     nrow(raw_psm),
-    nrow(psm),
     n_fractions,
     n_distinct(psm$Peptide),
     n_distinct(psm$Protein)
@@ -250,6 +254,48 @@ plot_jaccard_heatmap(
   color_high = "deeppink2",
   plot_title = "Protein overlap between fractions (Jaccard %)"
 )
+```
+
+------------------------------------------------------------------------
+
+## Calibration stability by fraction
+
+Mass accuracy is expressed as the deviation between the measured and the theoretical peptide mass in parts per million (PPM):
+
+$$\text{PPM} = \frac{\text{Delta Mass}}{\text{Calculated Peptide Mass}} \times 10^6$$
+
+Values close to **0 PPM** indicate accurate mass calibration. A systematic shift affecting all fractions may reflect a global calibration offset, whereas fraction-specific deviations could point to instrument drift or sample-related issues during acquisition. 
+
+<br>
+
+### Summary
+```{r ppm-stats-table}
+psm %>%
+  group_by(Fraction) %>%
+  summarise(
+    N       = n(),
+    Median  = round(median(PPM, na.rm = TRUE), 3)
+  ) %>%
+  arrange(as.numeric(str_extract(Fraction, "\\d+$"))) %>%
+  kbl(
+    col.names = c("Fraction", "N", "Median (PPM)")
+  ) %>%
+  kable_paper("hover", full_width = FALSE, font_size = 15)
+```
+
+<br>
+
+### Boxplot
+
+```{r ppm-boxplot, fig.height=5, fig.width=9}
+ggplot(psm, aes(x = `Fraction`, y = PPM, fill = `Fraction`)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") + 
+  coord_cartesian(ylim = c(-5, 5)) + 
+  theme_minimal() +
+  labs(x = "Fraction",
+       y = "Mass error (PPM)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 <hr>

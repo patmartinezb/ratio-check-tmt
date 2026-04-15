@@ -78,7 +78,6 @@ if (show_modifications) {
   } else if (tmt_type == "tmt") {
     "K\\(229\\.16293\\)"
   } else {
-    # tmtzero: mass 295.1896
     "K\\(295\\.1896\\)"
   }
 
@@ -167,8 +166,6 @@ cat("### Percentage of modified peptides")
 ```
 
 ```{r eval=show_modifications}
-# Count directly with summarise — avoids pivot_wider missing columns
-# when zero peptides match a condition (e.g. is_K_tmt in tmtzero)
 df_label <- df_psm %>%
   select(peptide, assigned_modifications) %>%
   summarise(

@@ -47,8 +47,7 @@ psm <- raw_psm %>%
   mutate(
     Fraction = str_extract(`Spectrum.File`, "(?<=([\\\\/]))[^\\\\/.]+(?=\\.)"),
     PPM      = (`Delta.Mass` / `Calculated.Peptide.Mass`) * 1e6,
-    RT_min = (`Retention` / 60)) %>%
-  select(Fraction, Peptide, Protein, PPM, RT_min)
+  select(Fraction, Peptide, Protein, PPM))
 
 
 n_fractions <- n_distinct(psm$Fraction)

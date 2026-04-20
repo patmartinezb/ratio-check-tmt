@@ -235,17 +235,17 @@ df_ratio_psm %>%
 
 ```{r eval=is_tmt}
 df_ratio_psm %>%
-  ggplot(aes(channel, ratio)) +
-  geom_col(fill  = rainbow(nrow(anno_psm)),
-           color = "grey20",
-           alpha = .5) +
+  ggplot(aes(channel, ratio, fill = channel)) +
+  geom_col(color = "grey20", alpha = .5) +
+  scale_fill_manual(values = rainbow(nrow(anno_psm))) +
   theme_classic() +
   scale_y_continuous(expand = c(0, 0)) +
   geom_text(aes(label = round(ratio, 3)),
             angle = 90,
             hjust = 1.5) +
   labs(x = "Channel",
-       y = "Ratio")
+       y = "Ratio") +
+  theme(legend.position = "none")
 ```
 
 ```{r eval=is_tmt, results='asis'}
@@ -253,19 +253,19 @@ cat("### Volume\n\nVolumes (uL) per sample:")
 ```
 
 ```{r eval=is_tmt}
-df_ratio_psm %>%
+df_volume <- df_ratio_psm %>%
   mutate(volume = round(params$volume * pq_ratio / max(pq_ratio), 1)) %>%
   left_join(anno_psm, by = "channel") %>%
   rename(sample = key) %>%
-  select(sample,
-         channel,
-         volume) %>%
+  select(sample, channel, volume) %>%
   arrange(factor(channel, levels = anno_psm$channel)) %>%
-  janitor::adorn_totals("row", fill = "Total volume") %>%
+  janitor::adorn_totals("row", fill = "Total volume")
+
+df_volume %>%
   kbl() %>%
   kable_paper("hover", full_width = F, font_size = 19) %>%
   column_spec(3, background = "lightblue") %>%
-  row_spec(nrow(anno_psm) + 1, background = "salmon")
+  row_spec(nrow(df_volume), background = "salmon")
 ```
 
 <br>
@@ -285,6 +285,7 @@ df_ratio_psm %>%
   kable_paper("hover", full_width = F, font_size = 19) %>%
   row_spec(1, bold = T, color = "white", background = "#D7261E")
 ```
+
 <hr>
 
 <footer style="font-size: 0.75em; color: #555;">
@@ -292,15 +293,11 @@ df_ratio_psm %>%
 <p><strong>For improvements, suggestions, optimizations, and inquiries, contact:</strong></p>
 
 <p style="text-indent: 2em;">
-
 Patricia Martínez — <a href="mailto:patricia.martinez@ispasturias.es">patricia.martinez\@ispasturias.es</a>
-
 </p>
 
 <p style="text-indent: 2em;">
-
 Sergio Carrascal — <a href="mailto:sergio.carrascal@ispasturias.es">sergio.carrascal\@ispasturias.es</a>
-
 </p>
 
 </footer>

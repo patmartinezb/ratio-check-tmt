@@ -29,13 +29,14 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(stringr)
+library(scales)
 library(kableExtra)
 ```
 
 ```{r load-and-filter}
 # Load raw data
 raw_psm <- read.delim(
-  params$data,
+  "./psm.tsv",
   header = TRUE,
   sep    = "\t"
 )
@@ -47,7 +48,8 @@ psm <- raw_psm %>%
   mutate(
     Fraction = str_extract(`Spectrum.File`, "(?<=([\\\\/]))[^\\\\/.]+(?=\\.)"),
     PPM      = (`Delta.Mass` / `Calculated.Peptide.Mass`) * 1e6,
-  select(Fraction, Peptide, Protein, PPM))
+  ) %>%
+  select(Fraction, Peptide, Protein, PPM)
 
 
 n_fractions <- n_distinct(psm$Fraction)
@@ -110,16 +112,20 @@ protein_matrix <- build_jaccard_matrix(protein_dict)
 ```
 
 ```{r heatmap-function}
-# Reusable heatmap builder — lower triangle only
-plot_jaccard_heatmap <- function(mat, color_mid, color_high, plot_title) {
+plot_jaccard_heatmap <- function(
+  mat,
+  color_low,
+  color_mid,
+  color_high,
+  plot_title,
+  limits = NULL
+) {
 
   fraction_order <- rownames(mat)
 
-  # Keep only lower triangle
-  mat_lower           <- mat
+  mat_lower <- mat
   mat_lower[upper.tri(mat_lower)] <- NA
 
-  # Convert to long format
   df_long <- data.frame(
     fraction_row = rep(rownames(mat_lower), times = ncol(mat_lower)),
     fraction_col = rep(colnames(mat_lower), each  = nrow(mat_lower)),
@@ -127,26 +133,41 @@ plot_jaccard_heatmap <- function(mat, color_mid, color_high, plot_title) {
   )
 
   df_long <- df_long[!is.na(df_long$jaccard), ]
-  df_long$jaccard      <- round(df_long$jaccard, 2)
+  
+  df_long <- df_long %>%
+    mutate(label_text = ifelse(jaccard == 100, 
+                               "100", 
+                               sprintf("%.2f", jaccard)))
+
   df_long$fraction_row <- factor(df_long$fraction_row, levels = fraction_order)
   df_long$fraction_col <- factor(df_long$fraction_col, levels = fraction_order)
 
+  if (is.null(limits)) {
+    limits <- c(0, max(df_long$jaccard, na.rm = TRUE))
+  }
+
+  values_scaled <- scales::rescale(c(limits[1], mean(limits), limits[2]))
+
   ggplot(df_long, aes(x = fraction_col, y = fraction_row, fill = jaccard)) +
     geom_tile(color = "white") +
-    geom_text(aes(label = jaccard), size = 3) +
-  scale_fill_gradient2(
-    low      = "#f5f5f5",
-    mid      = color_mid,
-    high     = color_high,
-    midpoint = 50,
-    na.value = "transparent",
-    name     = "Jaccard (%)"
-  )+
+    geom_text(aes(label = label_text), 
+              size = 3) + 
+    scale_fill_gradientn(
+      colours  = c(color_low, color_mid, color_high),
+      values   = values_scaled,
+      limits   = limits,
+      na.value = "transparent",
+      name     = "Jaccard (%)"
+    ) +
     labs(x = "Fraction", y = "Fraction", title = plot_title) +
     theme_classic() +
+    coord_fixed() + 
     theme(
-      axis.text.x  = element_text(angle = 45, hjust = 1),
-      aspect.ratio = 1
+      axis.title.x = element_text(margin = margin(t = 15)),
+      axis.title.y = element_text(margin = margin(r = 15)),
+      axis.text.x  = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 7),
+      axis.text.y  = element_text(size = 7),
+      plot.title   = element_text(face = "bold", size = 11)
     )
 }
 ```
@@ -176,43 +197,58 @@ data.frame(
 
 <br>
 
-```{r barplot, fig.height=5, fig.width=8}
-bar_data <- inner_join(
-    peptide_dict %>% select(Fraction, Number_of_Peptides),
-    protein_dict %>% select(Fraction, Number_of_Proteins),
-    by = "Fraction"
-  ) %>%
-  mutate(Fraction = factor(Fraction, levels = unique(Fraction))) %>%
-  pivot_longer(-Fraction, names_to = "Type", values_to = "Count")
+```{r barplot-peptides, fig.height=5, fig.width=8}
+peptide_bar <- peptide_dict %>%
+  mutate(Fraction = factor(Fraction, levels = unique(Fraction)))
 
-y_max <- max(bar_data$Count) * 1.12
+y_max_pep <- max(peptide_bar$Number_of_Peptides) * 1.25
 
-ggplot(bar_data, aes(x = Fraction, y = Count, fill = Type)) +
-  geom_col(position = "dodge", alpha = 0.75, color = "grey25") +
+ggplot(peptide_bar, aes(x = Fraction, y = Number_of_Peptides)) +
+  geom_col(alpha = 0.80, fill = "#C06C5B", color = "grey25") +
   geom_text(
-    aes(label = Count),
-    position = position_dodge(width = 0.9),
+    aes(label = Number_of_Peptides),
     angle = 90, vjust = 0.5, hjust = -0.15, size = 3
   ) +
-  scale_fill_manual(
-    values = c(
-      "Number_of_Peptides" = "royalblue",
-      "Number_of_Proteins" = "deeppink2"
-    ),
-    labels = c(
-      "Number_of_Peptides" = "Peptides",
-      "Number_of_Proteins" = "Proteins"
-    ),
-    name = NULL
-  ) +
-  scale_y_continuous(expand = c(0, 0), limits = c(0, y_max)) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, y_max_pep)) +
   labs(
     x     = "Fraction",
     y     = "Count",
-    title = "Unique peptides and proteins per fraction"
+    title = "Unique peptides per fraction"
   ) +
   theme_classic() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    axis.title.x = element_text(margin = margin(t = 15)),
+    axis.title.y = element_text(margin = margin(r = 15)),
+    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    plot.title   = element_text(face = "bold", size = 11))
+```
+
+<br>
+
+```{r barplot-proteins, fig.height=5, fig.width=8}
+protein_bar <- protein_dict %>%
+  mutate(Fraction = factor(Fraction, levels = unique(Fraction)))
+
+y_max_pro <- max(protein_bar$Number_of_Proteins) * 1.25
+
+ggplot(protein_bar, aes(x = Fraction, y = Number_of_Proteins)) +
+  geom_col(alpha = 0.80, fill = "#457B9D", color = "grey25") +
+  geom_text(
+    aes(label = Number_of_Proteins),
+    angle = 90, vjust = 0.5, hjust = -0.15, size = 3
+  ) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, y_max_pro)) +
+  labs(
+    x     = "Fraction",
+    y     = "Count",
+    title = "Unique proteins per fraction"
+  ) +
+  theme_classic() +
+  theme(
+    axis.title.x = element_text(margin = margin(t = 15)),
+    axis.title.y = element_text(margin = margin(r = 15)),
+    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    plot.title   = element_text(face = "bold", size = 11))
 ```
 
 ------------------------------------------------------------------------
@@ -234,9 +270,11 @@ A value of **0%** means the two fractions share no peptides or proteins (perfect
 ```{r heatmap-peptides, fig.height=6, fig.width=7}
 plot_jaccard_heatmap(
   mat        = peptide_matrix,
-  color_mid  = "skyblue",
-  color_high = "royalblue",
-  plot_title = "Peptide overlap between fractions (Jaccard %)"
+  color_low  = "#F4F1DE",
+  color_mid  = "#81B29A",
+  color_high = "#C06C5B",
+  plot_title = "Peptide overlap between fractions (Jaccard %)",
+  limits     = c(0, 10)
 )
 ```
 
@@ -249,9 +287,11 @@ plot_jaccard_heatmap(
 ```{r heatmap-proteins, fig.height=6, fig.width=7}
 plot_jaccard_heatmap(
   mat        = protein_matrix,
-  color_mid  = "lightpink",
-  color_high = "deeppink2",
-  plot_title = "Protein overlap between fractions (Jaccard %)"
+  color_low  = "#F4F1DE",
+  color_mid  = "#6C7A89",
+  color_high = "#C08497",
+  plot_title = "Protein overlap between fractions (Jaccard %)",
+  limits     = c(25, 50)
 )
 ```
 
@@ -294,7 +334,10 @@ ggplot(psm, aes(x = `Fraction`, y = PPM, fill = `Fraction`)) +
   theme_minimal() +
   labs(x = "Fraction",
        y = "Mass error (PPM)") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    axis.title.x = element_text(margin = margin(t = 15)),
+    axis.title.y = element_text(margin = margin(r = 15)),
+    axis.text.x = element_text(angle = 90, vjust = 0.5))
 ```
 
 <hr>

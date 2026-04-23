@@ -36,7 +36,7 @@ library(kableExtra)
 ```{r load-and-filter}
 # Load raw data
 raw_psm <- read.delim(
-  "./psm.tsv",
+  params$data,
   header = TRUE,
   sep    = "\t"
 )
@@ -219,7 +219,7 @@ ggplot(peptide_bar, aes(x = Fraction, y = Number_of_Peptides)) +
   theme(
     axis.title.x = element_text(margin = margin(t = 15)),
     axis.title.y = element_text(margin = margin(r = 15)),
-    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    axis.text.x  = element_text(angle = 90, vjust = 0.5),
     plot.title   = element_text(face = "bold", size = 11))
 ```
 
@@ -247,7 +247,7 @@ ggplot(protein_bar, aes(x = Fraction, y = Number_of_Proteins)) +
   theme(
     axis.title.x = element_text(margin = margin(t = 15)),
     axis.title.y = element_text(margin = margin(r = 15)),
-    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    axis.text.x  = element_text(angle = 90, vjust = 0.5),
     plot.title   = element_text(face = "bold", size = 11))
 ```
 

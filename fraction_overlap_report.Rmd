@@ -46,7 +46,7 @@ n_psm <- nrow(raw_psm)
 # Keep only unique PSMs and extract fraction label
 psm <- raw_psm %>%
   mutate(
-    Fraction = str_extract(`Spectrum.File`, "(?<=([\\\\/]))[^\\\\/.]+(?=\\.)"),
+    Fraction = str_extract(`Spectrum.File`, "[^\\\\/]+(?=\\.[^\\\\/]*$)"),
     PPM      = (`Delta.Mass` / `Calculated.Peptide.Mass`) * 1e6,
   ) %>%
   select(Fraction, Peptide, Protein, PPM)
@@ -151,7 +151,7 @@ plot_jaccard_heatmap <- function(
   ggplot(df_long, aes(x = fraction_col, y = fraction_row, fill = jaccard)) +
     geom_tile(color = "white") +
     geom_text(aes(label = label_text), 
-              size = 3) + 
+              size = 2) + 
     scale_fill_gradientn(
       colours  = c(color_low, color_mid, color_high),
       values   = values_scaled,

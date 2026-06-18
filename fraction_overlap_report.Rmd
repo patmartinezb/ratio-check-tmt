@@ -337,7 +337,9 @@ ggplot(psm, aes(x = `Fraction`, y = PPM, fill = `Fraction`)) +
   theme(
     axis.title.x = element_text(margin = margin(t = 15)),
     axis.title.y = element_text(margin = margin(r = 15)),
-    axis.text.x = element_text(angle = 90, vjust = 0.5))
+    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    legend.position = "none"
+  )
 ```
 
 <hr>

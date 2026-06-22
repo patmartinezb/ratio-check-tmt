@@ -342,6 +342,24 @@ ggplot(psm, aes(x = `Fraction`, y = PPM, fill = `Fraction`)) +
   )
 ```
 
+### Histogram
+
+```{r ppm-histogram, fig.height=5, fig.width=9}
+ggplot(psm, aes(x = PPM, fill = `Fraction`)) +  
+  geom_histogram(binwidth = 0.1, alpha = 0.7, position = "identity") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") + 
+  coord_cartesian(xlim = c(-5, 5)) + 
+  theme_minimal() +
+  labs(x = "Mass error (PPM)",
+       y = "Count") +
+  theme(
+    axis.title.x = element_text(margin = margin(t = 15)),
+    axis.title.y = element_text(margin = margin(r = 15)),
+    legend.position = "none"
+  ) 
+```
+
+
 <hr>
 
 <footer style="font-size: 0.75em; color: #555;">
